@@ -1,0 +1,8 @@
+WFIREAD changelog (last updated: 11/29/2014)
+
+===== version 1.11 (11/29/2014) =====
+
+major changes in this release focus on parallelization of several important processes:
+1. parallelized file readin using 4 threads. files can now be read in 4x faster
+2. parallelized gaussian fitting routine (with new script stack_fitgauss). the workflow
+   of extracting particles and their fitboxes are also updated.
