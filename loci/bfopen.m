@@ -139,28 +139,28 @@ for s = 1:numSeries
     bppMax = power(2, bpp * 8);
     numImages = r.getImageCount();
     imageList = cell(numImages, 2);
-    %colorMaps = cell(numImages);
+    colorMaps = cell(numImages);
     for i = 1:numImages
-        %if mod(i, 72) == 1
-        %    fprintf('\n    ');
-        %end
-        %fprintf('.');
+        if mod(i, 72) == 1
+            fprintf('\n    ');
+        end
+        fprintf('.');
         arr = bfGetPlane(r, i, varargin{:});
 
         % retrieve color map data
-        %if bpp == 1
-        %    colorMaps{s, i} = r.get8BitLookupTable()';
-        %else
-        %    colorMaps{s, i} = r.get16BitLookupTable()';
-        %end
+        if bpp == 1
+            colorMaps{s, i} = r.get8BitLookupTable()';
+        else
+            colorMaps{s, i} = r.get16BitLookupTable()';
+        end
         
-        %warning off
-        %if ~isempty(colorMaps{s, i})
-        %    newMap = single(colorMaps{s, i});
-        %    newMap(newMap < 0) = newMap(newMap < 0) + bppMax;
-        %    colorMaps{s, i} = newMap / (bppMax - 1);
-        %end
-        %warning on
+        warning off
+        if ~isempty(colorMaps{s, i})
+            newMap = single(colorMaps{s, i});
+            newMap(newMap < 0) = newMap(newMap < 0) + bppMax;
+            colorMaps{s, i} = newMap / (bppMax - 1);
+        end
+        warning on
 
 
         % build an informative title for our figure
@@ -216,7 +216,7 @@ for s = 1:numSeries
     seriesMetadata = r.getSeriesMetadata();
     loci.formats.MetadataTools.merge(globalMetadata, seriesMetadata, 'Global ');
     result{s, 2} = seriesMetadata;
-    %result{s, 3} = colorMaps;
+    result{s, 3} = colorMaps;
     result{s, 4} = r.getMetadataStore();
     fprintf('\n');
 end

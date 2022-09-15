@@ -8,13 +8,13 @@ function oncolormap(object, event)
 
     switch choice
        case 1
-          colormap('Gray');
+          colormap(gca, 'Gray');
           params.colormap = 'gray';
        case 2
-          colormap('Bone');
+          colormap(gca, 'Bone');
           params.colormap = 'bone';
         case 3
-          colormap('Hot');
+          colormap(gca, 'Hot');
           params.colormap = 'hot';
     end
 

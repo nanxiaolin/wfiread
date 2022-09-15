@@ -14,16 +14,17 @@ params.startx = userdata.selection(1);
 params.starty = userdata.selection(2);
 params.endx   = userdata.selection(3);
 params.endy   = userdata.selection(4);
-params.factor = str2num(get(userdata.h_threshold, 'String'));
-params.sig_min = str2num(get(userdata.h_sigmamin, 'String'));
-params.sig_max = str2num(get(userdata.h_sigmamax, 'String'));
+params.factor = str2double(get(userdata.h_threshold, 'String'));
+params.sig_min = str2double(get(userdata.h_sigmamin, 'String'));
+params.sig_max = str2double(get(userdata.h_sigmamax, 'String'));
 params.meth = get(userdata.h_mnuPF, 'value');
-params.sm_area = str2num(get(userdata.h_smootharea, 'String'));
+%params.sm_area = str2double(get(userdata.h_smootharea, 'String'));
 
 %numObj = 1;
 %[numObj centers xs ys fit_boxes] = findparticles(0, userdata.currentframe);
 [img xoff yoff] = getselection();
-show3d(getselection, xoff, yoff, userdata.fig3d, '3D View of Fitting Area');
+nfig = userdata.fig3d;
+show3d(getselection, xoff, yoff, nfig, '3D View of Fitting Area');
     
 %if numObj == 1
 %    x0 = centers(2, 1);     y0 = centers(2, 1);

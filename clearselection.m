@@ -15,7 +15,7 @@ function clearselection
     end
     
     % if previous selection is in place, remove it
-	if userdata.h_selrect > 0
+	if isgraphics(userdata.h_selrect)
 		delete(userdata.h_selrect);
         userdata.h_selrect = -1;
     end

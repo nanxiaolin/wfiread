@@ -15,7 +15,7 @@ function [numObjects centers xss yss fit_boxes] = fp_nms(img, factor, sig_min, s
 % first use NMS to mark out the local maxima
 
 nms_region = 2; 	% search region is 1+2*nms_region
-rms = min(std(img));
+rms = min([min(std(img)), min(std(img, 0, 2))]);
 thresh = factor * rms;
 min_pixel = 4;
 mask_rgn = 4;
@@ -56,7 +56,7 @@ end
 fit_boxes = zeros(fit_height, fit_width, numObjects);
 %num_good = 0;
 
-for(i=1:numObjects)
+for i=1:numObjects
 	xs = x(i) - mask_rgn;
 	if xs<1
 		xs = 1;

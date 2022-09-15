@@ -53,6 +53,7 @@ iter = 0; ea = 1;
 while ((ex0 > err) || (ey0 > err) || (ea > err)) && (iter <= 20)
     % calculate the jacobian and difference matrices
     pos = 0;
+    sum = 0;
     for(i=1:sizex)   % column (first dimension) first
         for(j=1:sizey)
             
@@ -74,6 +75,8 @@ while ((ex0 > err) || (ey0 > err) || (ea > err)) && (iter <= 20)
             jg(pos, 5) = (j - x0)^2 * pexp / (sigx^3);
 			jg(pos, 6) = (i - y0)^2 * pexp / (sigy^3);
             dif(pos) = bk + pexp - img(i, j);
+            
+            sum = sum + pexp;
         end
     end
 
@@ -98,7 +101,7 @@ end
 
 % calculate the bk_rms and finess
 bk_rms = std(dif);
-finess = sqrt(dif' * dif)/sum(sum(img));
+finess = sqrt(dif' * dif)/sum;
 
 %[bk a]
 %toc

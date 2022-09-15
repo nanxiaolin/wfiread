@@ -8,42 +8,45 @@ function exportmovie(object, event)
     userdata = get(h_mainfig, 'userdata');
     frames = userdata.frames;
 
-	frame_skip = str2num(get(userdata.h_frameskip, 'string'));
-	frame_rate = str2num(get(userdata.h_framerate, 'string'));
+	frame_skip = str2double(get(userdata.h_frameskip, 'string')) + 1;
+	frame_rate = str2double(get(userdata.h_framerate, 'string'));
 
     cm = colormap;
 
     % let the user choose a file name
     pref_dir = userdata.exp_dir;
-    [path name ext] = fileparts(userdata.file);
+    [~, name, ~] = fileparts(userdata.file);
     pref_file = fullfile(pref_dir, name);
 
     extension = {'*.avi', 'Audio Video Interlace File (*.AVI)'};
-    [filename pathname] = uiputfile(extension, 'Choose a filename for the movie', pref_file);
+    [filename, pathname] = uiputfile(extension, 'Choose a filename for the movie', pref_file);
 
-    if filename == 0
+    if isempty(filename)
         return;
     end
 
 	userdata.exp_dir = pathname;
 
-    [path name ext] = fileparts(filename);
+    %[path, name, ext] = fileparts(filename);
     fullname = fullfile(pathname, filename);
-    %whos
 
-    %[quality compression fps sel_only] = getavipara(90, 'none', 3, 0);
-
-    aviobj = avifile(fullname);
-    aviobj.quality = 90;
-    aviobj.compression = 'none';
-    aviobj.fps = frame_rate;
-    % not supported under linux, unfortunately
+    aviobj = VideoWriter(fullname, 'Uncompressed AVI');
+    aviobj.FrameRate = frame_rate;
+    open(aviobj);
 
     titlemsg = get(h_mainfig, 'name');
     sel_only = get(userdata.h_exportselection, 'value');
 
- 	pstart = str2num(get(userdata.h_palmstart, 'String'));
-    pend   = str2num(get(userdata.h_palmend, 'string'));
+ 	pstart = str2double(get(userdata.h_palmstart, 'string'));
+    pend   = str2double(get(userdata.h_palmend, 'string'));
+    
+    if pstart < 1
+        pstart = 1;
+    end
+    
+    if pend > frames
+        pend = frames;
+    end
     
 
     for i = pstart : frame_skip : pend
@@ -54,23 +57,24 @@ function exportmovie(object, event)
         end
 
         % adjust image display range according to settings
-        mins = str2num(get(userdata.h_displow, 'String'));
-        maxs = str2num(get(userdata.h_disphigh, 'String'));
+        mins = str2double(get(userdata.h_displow, 'String'));
+        maxs = str2double(get(userdata.h_disphigh, 'String'));
 
-        img = uint8(255.0 * ((img - mins)/(maxs - mins)));
+        img = uint8(length(cm) * (img - mins)/(maxs - mins));
+        img(img > length(cm) -1) = length(cm)-1;
 
-        F(i) = im2frame(img, cm);
+        F = im2frame(img, cm);
 
         % convert the frame into AVI
-        aviobj = addframe(aviobj, F(i));
+        writeVideo(aviobj, F);
 
         newtitlemsg = sprintf('WFI Reader - Converting frame %d', i);
         set(h_mainfig, 'name', newtitlemsg);
-        pause(0.001);
+        pause(0.01);
     end
 
     %figure(2); movie(F);
-    aviobj = close(aviobj);
+    close(aviobj);
     set(h_mainfig, 'name', titlemsg);
 
 	message = sprintf('Movie %s \n has been created successfully.', filename);
@@ -79,9 +83,4 @@ function exportmovie(object, event)
 	% remembered changed settings
 	set(h_mainfig, 'userdata', userdata);
 
-
-%     function [quality compression fps sel_only] = getavipara(quality, compression, fps, sel_only)
-%         para_fig = 100;
-% 
-%         figure(para_fig, 'NumberTitle', 'off', 'Name', 'Avi Parameters', 'MenuBar', 'none', '
-%     end
+    return

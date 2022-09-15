@@ -11,17 +11,18 @@ function onmarker(object, event)
 
     global h_mainfig;
     userdata = get(h_mainfig, 'userdata');
-    pstart = str2num(get(userdata.h_palmstart, 'String'));
-    pend   = str2num(get(userdata.h_palmend, 'String'));
-    frameskip = str2num(get(userdata.h_frameskip, 'String')) + 1;
-    fit_frames = pstart : frameskip : pend;
-    frames = numel(fit_frames);
-    pend = fit_frames(frames);
     
-	%frames = pend - pstart + 1;
+    pstart = str2double(get(userdata.h_palmstart, 'String'));
+    pend   = str2double(get(userdata.h_palmend, 'String'));
+    %frameskip = str2num(get(userdata.h_frameskip, 'String'));
+    %fit_frames = pstart : frameskip : pend;
+    %frames = numel(fit_frames);
+    %pend = fit_frames(frames);
+    
+	frames = pend - pstart + 1;
 
 	% retrieve parameters of current particle from starting to ending frames
-    [pos sigx sigy ints] = ontrack(0, 0);
+    [pos, sigx, sigy, ints] = ontrack(0, 0);
 
 	userdata.markernum = userdata.markernum + 1;
 
@@ -29,7 +30,7 @@ function onmarker(object, event)
         set(userdata.h_markerdel, 'enable', 'on');
 
 		% initialize the userdata.markers matrix - at least 2 markers 
-		userdata.markers = zeros(2, frames, 5);
+		userdata.markers = zeros(1, frames, 5);
 	end
 
 	userdata.markers(userdata.markernum, 1:frames, 1:5) = [pos(:, 1) pos(:, 2) sigx sigy ints];
@@ -47,13 +48,15 @@ function onmarker(object, event)
 	
     % draw a cross on the particle
     figure(h_mainfig); hold on;
-	pf = userdata.currentframe - pstart + 1;
-    userdata.markerhandles(userdata.markernum) = plot(pos(pf, 1), pos(pf, 2), 'g+', 'LineWidth', 2, 'MarkerSize', 6);
+	draw_frame = userdata.currentframe - pstart + 1;
+	if draw_frame < 1
+		draw_frame = 1;
+	end
+    userdata.markerhandles(userdata.markernum) = plot(pos(draw_frame, 1), pos(draw_frame, 2), 'g+', 'LineWidth', 2, 'MarkerSize', 6);
 
-	% below are the same code as the ontrack function
-    k = userdata.currentframe;
+	% also box the particle with the same color as the displacement trajectory
     color = rand(1,3);
-    figure(h_mainfig); hold on; plot(pos(k - pstart + 1, 1), pos(k - pstart + 1, 2), 's', 'LineWidth', 2, 'MarkerSize', 18, 'MarkerEdgeColor', color);
+    figure(h_mainfig); hold on; plot(pos(draw_frame, 1), pos(draw_frame, 2), 's', 'LineWidth', 2, 'MarkerSize', 18, 'MarkerEdgeColor', color);
 
 	% calculate the stdx and stdy for the added marker
     pos(:, 1) = pos(:, 1) - userdata.markerpos(1 : frames, 1);
@@ -66,9 +69,9 @@ function onmarker(object, event)
 
 	% also show the displacement of the current marker after adding it to the marker pool
     displ = displace(pos);
-    %f = pstart: pend;
-    figure(userdata.figdisplace); set(gcf, 'numbertitle', 'off', 'name', 'Displacement Trajectory');
-    hold on; plot(fit_frames, displ, 'Color', color);
+    f = pstart: pend;
+    figure(userdata.figdisplace); set(userdata.figdisplace, 'numbertitle', 'off', 'name', 'Displacement Trajectory');
+    hold on; plot(f, displ, 'Color', color);
     xlabel('Frame No.');    ylabel('Displacement (pixel)');
     xlim([pstart max(pend, pstart + 1)]);       ylim([0 max(1, max(max(ylim), max(displ)))]);
     grid on; box on;
@@ -81,7 +84,6 @@ function onmarker(object, event)
 	% we need to disable the palm start and ending frames
 	set(userdata.h_palmstart, 'enable', 'off');
 	set(userdata.h_palmend, 'enable', 'off');
-    set(userdata.h_frameskip, 'enable', 'off');
 
     set(h_mainfig, 'userdata', userdata);
 return

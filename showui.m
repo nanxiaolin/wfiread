@@ -5,8 +5,8 @@ function showui()
 % code
 
     global h_mainfig params;
-
-    if h_mainfig
+    
+    if isgraphics(h_mainfig)
         msgbox('Another instance of WFI Reader is already running. Click OK to end.', 'Error', 'Error');
         return;
     end
@@ -24,14 +24,13 @@ function showui()
 
     set(h_mainfig, 	...
         'unit', 'pixels', ...
-        'position', [(screen_width - window_width)/2 (screen_height - window_height)/2 window_width window_height], ...
         'NumberTitle', 'off', ...
         'Name', 'WFI reader', ...
         'Resize', 'off', ...
         'ToolBar', 'none', ...
         'MenuBar', 'none');
 
-    userdata = get(h_mainfig, 'userdata');
+    %userdata = get(h_mainfig, 'userdata');
     userdata.h_axis = gca;
 
     axpos = get(gca, 'Position');
@@ -44,26 +43,42 @@ function showui()
 	userdata.exp_dir = '';
 
     % figure numbers used by the program
-    userdata.figdisplace = h_mainfig + 1;
-    userdata.fig3d = h_mainfig + 2;
-    userdata.figpalm = h_mainfig + 3;
-    userdata.figlowres = h_mainfig + 4;
-    userdata.figintensity = h_mainfig + 5;
-    userdata.figposition = h_mainfig + 6;
+    h_figx = figure('visible', 'off');
+    userdata.figdisplace = h_figx.Number;
+    h_figx = figure('visible', 'off');
+    userdata.fig3d = h_figx.Number;
+    %userdata.figpalm = figure('visible', 'off');
+    %userdata.figlowres = figure('visible', 'off');
+    h_figx = figure('visible', 'off');
+    userdata.figintensity = h_figx.Number;
+    h_figx = figure('visible', 'off');
+    userdata.figposition = h_figx.Number;
 
     % get handles to the buttons
     userdata.h_open = findobj(h_mainfig, 'tag', 'btnopen');
+    set(userdata.h_open, 'callback', @openfile);
     userdata.h_play = findobj(h_mainfig, 'tag', 'btnplay');
+    set(userdata.h_play, 'callback', @playmovie);
     userdata.h_slider = findobj(h_mainfig, 'tag', 'slider');
+    set(userdata.h_slider, 'callback', @onslider);
+    userdata.h_openlv = findobj(h_mainfig, 'tag', 'btnOpenLargeVideo');
+    set(userdata.h_openlv, 'callback', @openlargefile);
+	userdata.h_loadlinked = findobj(h_mainfig, 'tag', 'chkLoadAssocFiles');
     
     %userdata.h_select = findobj(h_mainfig, 'tag', 'btnselect');
     userdata.h_threshold = findobj(h_mainfig, 'tag', 'edthreshold');
-	userdata.h_smootharea = findobj(h_mainfig, 'tag', 'edSmoothArea');
+	userdata.h_contrastfactor = findobj(h_mainfig, 'tag', 'edContrastFactor');
 	userdata.h_sigmamax = findobj(h_mainfig, 'tag', 'edSigmaMax');
 	userdata.h_sigmamin = findobj(h_mainfig, 'tag', 'edSigmaMin');
     userdata.h_plot = findobj(h_mainfig, 'tag', 'btnplot');
+    set(userdata.h_plot, 'callback', @onplot);
     userdata.h_find = findobj(h_mainfig, 'tag', 'btnfind');
+    set(userdata.h_find, 'callback', @findparticles);
+	userdata.h_psfsize = findobj(h_mainfig, 'tag', 'edPSFsize');
+	set(userdata.h_psfsize, 'callback', @onpsfsize);
+    
     userdata.h_fit = findobj(h_mainfig, 'tag', 'btnfit');
+    set(userdata.h_fit, 'callback', @onfit);
     userdata.h_mnuPF = findobj(h_mainfig, 'tag', 'mnuParticleFinding');
     userdata.h_mnuGF = findobj(h_mainfig, 'tag', 'mnuGaussFitting');
     %userdata.h_stats = findobj(h_mainfig, 'tag', 'btnstats');
@@ -71,7 +86,7 @@ function showui()
 
     userdata.h_export = findobj(h_mainfig, 'tag', 'btnexport');
 	set(userdata.h_export, 'callback', @exportmovie);
-    userdata.h_exporttype = findobj(h_mainfig, 'tag', 'mnexport');
+    userdata.h_exporttype = findobj(h_mainfig, 'tag', 'mnuexporttype');
     set(userdata.h_exporttype, 'callback', @onexporttype);
     userdata.h_exportselection = findobj(h_mainfig, 'tag', 'chkexportselection');
 	userdata.h_frameskip = findobj(h_mainfig, 'tag', 'edFrameSkip');
@@ -79,12 +94,15 @@ function showui()
 
     % draw the 'track' button and controls
     userdata.h_track = findobj(h_mainfig, 'tag', 'btntrack');
+    set(userdata.h_track, 'callback', @ontrack);
     userdata.h_marker = findobj(h_mainfig, 'tag', 'btnaddmarker');
+    set(userdata.h_marker, 'callback', @onmarker);
     userdata.h_markerdel = findobj(h_mainfig, 'tag', 'btndelmarker');
+    set(userdata.h_markerdel, 'callback', @onmarkerdel);
 
     % draw the PALM group of controls
-    userdata.h_palm = findobj(h_mainfig, 'tag', 'btnpalm');
-	set(userdata.h_palm, 'callback', @palm);
+    %userdata.h_palm = findobj(h_mainfig, 'tag', 'btnpalm');
+	%set(userdata.h_palm, 'callback', @palm);
     userdata.h_palmstart = findobj(h_mainfig, 'tag', 'edpalmstart');
     userdata.h_palmend = findobj(h_mainfig, 'tag', 'edpalmend');
     userdata.h_makecoord = findobj(h_mainfig, 'tag', 'btnMakeCoordFile');
@@ -95,10 +113,24 @@ function showui()
 
     % display settings control
     userdata.h_autoscale = findobj(h_mainfig, 'tag', 'chkautoscale');
+    set(userdata.h_autoscale,'callback', @onautoscale);
     userdata.h_disphigh = findobj(h_mainfig, 'tag', 'eddisphigh');
     userdata.h_displow  = findobj(h_mainfig, 'tag', 'eddisplow');
     %colors = {'Gray', 'Autumn', 'Hot'};  %, 'Cyan', 'Blue', 'Green', 'Orange', 'Red', 'HiLow'};
-    userdata.h_colormap = findobj(h_mainfig, 'tag', 'mncolormap');
+    userdata.h_colormap = findobj(h_mainfig, 'tag', 'mnucolormap');
+    set(userdata.h_colormap, 'value', 3, 'callback', @oncolormap);
+	userdata.h_zoom = findobj(h_mainfig, 'tag', 'chkMainZoom');
+	set(userdata.h_zoom, 'value', 0, 'callback', @onzoom, 'enable', 'off');
+	userdata.h_pan = findobj(h_mainfig, 'tag', 'chkMainPan');
+	set(userdata.h_pan, 'value', 0, 'callback', @onpan, 'enable', 'off');
+	userdata.h_resetview = findobj(h_mainfig, 'tag', 'btnResetview');
+	set(userdata.h_resetview, 'callback', 'axis image; checkzoom', 'enable', 'off');
+    userdata.h_image = -1;
+    userdata.h_particlecenters = -1;
+    
+    % global variables
+    params.colormap = 'hot';
+    params.largevmode = 0;
     
 	% misc controls
 	userdata.h_curframe = findobj(h_mainfig, 'tag', 'edCurrentFrame');
@@ -111,9 +143,5 @@ function showui()
 
     set(h_mainfig, 'userdata', userdata);
     set(h_mainfig, 'CloseRequestFcn', @closefigs);
-    
-    % set a few field for params;
-    params.colormap = 'autumn';
-    %params.frameskip = str2num(get(userdata.h_frameskip, 'string')) + 1;
-    
+      
 return;

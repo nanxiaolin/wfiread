@@ -16,9 +16,25 @@ function showpoint(object, event)
         set(h_mainfig, 'Pointer', 'arrow');
 		return;
     else
+		if xinit < 1
+			xinit = 1;
+		end
+		
+		if yinit < 1
+			yinit = 1;
+		end
+		
+		if xinit > userdata.width
+			xinit = userdata.width;
+		end
+		
+		if yinit > userdata.height
+			yinit = userdata.height;
+		end
+	
         intensity = ongetframe(0, [xinit yinit]);
         mesg = sprintf('(%d, %d)', xinit, yinit);
         showmsg(h_mainfig, 'edcursorpos', mesg);
-        showmsg(h_mainfig, 'edintensity', sprintf('%6d', intensity(1)));
+        showmsg(h_mainfig, 'edintensity', sprintf('%6d', intensity));
         set(h_mainfig, 'Pointer', 'crosshair');
     end

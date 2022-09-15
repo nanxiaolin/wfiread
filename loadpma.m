@@ -5,29 +5,12 @@ global imgdata h_mainfig;
 userdata = get(h_mainfig, 'userdata');
 
 %disp 'PMA file opened.';
-
 width = fread(fp, 1, 'uint16');
 height = fread(fp, 1, 'uint16');
 
-%frame_size = width * height * 2;
-%fseek(fp, -2-frame_size, 'eof');
-%frames = fread(fp, 1, 'uint16');
-
-%% note on 12/08/2012: the 'uint16' data type supports up to 65536 frames
-%% STORM movies may go beyond that
-%% therefore we chose to ignore the recorded 'frame' value preceeding each frame
-%% and use the actual file size to calculate how many frames are recorded instead
-%% for PMA files, there are 2 uint16 types (2 bytes each in the beginning of the
-%% file for width and height); 
-%% the remainder of the file is: frame number (2 bytes) + frame data
-%% the following code is for the new method of caluclating frames
-
-fseek(fp, 0, 'bof');
-pos1 = ftell(fp);
-fseek(fp, 0, 'eof');
-pos2 = ftell(fp);
-frames = (pos2 - pos1 - 4) / (width * height * 2 + 2);
-
+frame_size = width * height * 2;
+fseek(fp, -2-frame_size, 'eof');
+frames = fread(fp, 1, 'uint16');
 max_frames = floor(3.0e9/(width * height));
 
 if frames > max_frames

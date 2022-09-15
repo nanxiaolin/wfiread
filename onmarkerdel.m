@@ -20,6 +20,5 @@ function onmarkerdel(object, event)
    	% we need to enable the palm start and ending frames
 	set(userdata.h_palmstart, 'enable', 'on');
 	set(userdata.h_palmend, 'enable', 'on');
-    set(userdata.h_frameskip, 'enable', 'on');
 
 return

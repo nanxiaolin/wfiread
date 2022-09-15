@@ -8,27 +8,13 @@ function wfiread()
     % Now has ability to read tif, tif stacks, PMA files
     % do gaussian fitting, particle tracking, and PALM/STORM data
     % processing
-    %
     % 
-    % Major update 03/2015: 
-    % 1. added support for multichannel data by using a new data structure
-    %    to store the image and parameter data
-    % 2. changed the .cor file format to .loc (to accommodate multichannel
-    %    data
-    % 3. now wfiread and palm are integrated as one package
-    % 4. the new package is renamed as nanoimg
     %
-    %
-	% initialize the program
+	% initialize the interface
     
-    % intialize the img structure (that has all the image and parameter
-    % data
-    
-    initiate_img();
-	
-    % initiate the user interface
-    showui();
-	
+	showui();
+	%
+	%openfile();
     
     % load the loci toolbox: this will corrupt the global variables
     % please do not uncomment

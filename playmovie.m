@@ -9,22 +9,23 @@ function playmovie(obj, event)
         return;
     end
 
-    startframe = userdata.currentframe;
-    frameskip = str2num(get(userdata.h_frameskip, 'String')) + 1;
+    startframe = double(userdata.currentframe);
+    frameskip = str2double(get(userdata.h_frameskip, 'String')) + 1;
     stop = 0;
 
     set(userdata.h_play, 'callback', @stopmovie);
     set(userdata.h_play, 'String', 'Stop');
- 
+    
     for i=startframe: frameskip : userdata.frames
         showframe(i);
         %findparticles();
         set(userdata.h_slider, 'Value', i - 1);
-        pause(0.08);
-
+        %pause(0.01);
+        
         if stop == 1
             break;
         end
+        
     end
 
     set(userdata.h_play, 'callback', @playmovie);
@@ -32,5 +33,5 @@ function playmovie(obj, event)
 
     function stopmovie(object, event)
         stop = 1;
-    end;
+    end
 end

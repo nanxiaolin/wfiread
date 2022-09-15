@@ -1,1 +1,271 @@
-function data = loadtiff(fp, img_first, img_last)% LOADTIFF is a revised version of the tiffread function (v2.0) by% Francois Nedelec, EMBL (c)1999-2004.%% Revision by Xiaolin Nan, UC Berkeley, to integrate into the WFI Reader% Package.%% Last Modified: 10/21/2008global imgdata;global h_mainfig;global TIF;consolidateStrips = true;TIF = [];img_skip  = 0;img_read  = 0;img_first = 1;% set defaults values :TIF.SampleFormat     = 1;TIF.SamplesPerPixel  = 1;TIF.BOS              = 'l';          %byte order stringTIF.file = fp;% read header% read byte order: II = little endian, MM = big endianbyte_order = char(fread(TIF.file, 2, 'uchar'));if ( strcmp(byte_order', 'II') )    TIF.BOS = 'l';                                %normal PC formatelseif ( strcmp(byte_order','MM') )    TIF.BOS = 'b';else    showmsg(h_mainfig, 'message', 'This is not a TIFF file (no MM or II).');    data = 0;    return;end%----- read in a number which identifies file as TIFF formattiff_id = fread(TIF.file,1,'uint16', TIF.BOS);if (tiff_id ~= 42)    showmsg(h_mainfig, 'message', 'This is not a TIFF file (missing 42).');    data = 0;    return;end%----- read the byte offset for the first image file directory (IFD)ifd_pos = fread(TIF.file,1,'uint32', TIF.BOS);imgdata = 0;data = 0;while (ifd_pos ~= 0)    clear IMG;    % IMG.filename = fullfile( pwd, filename );    % move in the file to the first IFD    fseek(TIF.file, ifd_pos, -1);    %disp(strcat('reading img at pos :',num2str(ifd_pos)));    %read in the number of IFD entries    num_entries = fread(TIF.file,1,'uint16', TIF.BOS);    %disp(strcat('num_entries =', num2str(num_entries)));    %read and process each IFD entry    for i = 1:num_entries        % save the current position in the file        file_pos  = ftell(TIF.file);        % read entry tag        TIF.entry_tag = fread(TIF.file, 1, 'uint16', TIF.BOS);        entry = readIFDentry;        %disp(strcat('reading entry <',num2str(TIF.entry_tag),'>'));        switch TIF.entry_tag            %       case 254            %           TIF.NewSubfiletype = entry.val;            case 256         % image width - number of column                IMG.width          = entry.val;                data.width         = entry.val;            case 257         % image height - number of row                IMG.height         = entry.val;                TIF.ImageLength    = entry.val;                data.height        = entry.val;            case 258         % BitsPerSample per sample                TIF.BitsPerSample  = entry.val;                TIF.BytesPerSample = TIF.BitsPerSample / 8;                IMG.bits           = TIF.BitsPerSample(1);                %fprintf(1,'BitsPerSample %i %i %i\n', entry.val);            case 259         % compression                if (entry.val ~= 1)                    showmsg(h_mainfig, 'message', 'Compression format not supported.');                    return;                end            case 273         % strip offset                TIF.StripOffsets   = entry.val;                TIF.StripNumber    = entry.cnt;                %fprintf(1,'StripNumber = %i, size(StripOffsets) = %i %i\n', TIF.StripNumber, size(TIF.StripOffsets));            case 277         % sample_per pixel                TIF.SamplesPerPixel  = entry.val;                %fprintf(1,'Color image: sample_per_pixel=%i\n',                %TIF.SamplesPerPixel);            case 278         % rows per strip                TIF.RowsPerStrip   = entry.val;            case 279         % strip byte counts - number of bytes in each strip after any compressio                TIF.StripByteCounts= entry.val;            case 284         %planar configuration describe the order of RGB                TIF.PlanarConfiguration = entry.val;                %planar configuration is not fully supported here                if ( TIF.PlanarConfiguration == 1 )                    mesg = sprintf('PlanarConfiguration = %i not supported', TIF.PlanarConfiguration);                    showmsg(h_mainfig, 'message', mesg);                    data = 0;                    return;                end            case 317        %predictor for compression                if (entry.val ~= 1)                    showmsg(h_mainfig, 'message', 'unsuported predictor value');                    data = 0;                    return;                end            case 339                TIF.SampleFormat   = entry.val;                if ( TIF.SampleFormat > 2 )                    mesg =sprintf('unsuported sample format = %i', TIF.SampleFormat);                    showmsg(h_mainfig, 'message', mesg);                    data = 0;                    return;                end            case 33629       %this tag identify the image as a Metamorph stack!                TIF.MM_stack       = entry.val;                TIF.MM_stackCnt      = entry.cnt;        end        % move to next IFD entry in the file        fseek(TIF.file, file_pos+12,-1);    end    %total number of bytes per image:    PlaneBytesCnt = IMG.width * IMG.height * TIF.BytesPerSample;    % prepare a temporary matrix to store normal TIF data    if ~exist('tempdata', 'var') && ~isfield( TIF, 'MM_stack' )        % 1.5e8 elements is about the maximum of matrices on a 32-bit XP machine        max_frames = round(1.2e8 / (IMG.width * IMG.height));        tempdata = zeros(max_frames, IMG.width, IMG.height, 'uint16');        %intensity = zeros(max_frames, 1);    end    if consolidateStrips        %Try to consolidate the strips into a single one to speed-up        %reading:        BytesCnt = TIF.StripByteCounts(1);        if BytesCnt < PlaneBytesCnt            ConsolidateCnt = 1;            %Count how many Strip are needed to produce a plane            while TIF.StripOffsets(1) + BytesCnt == TIF.StripOffsets(ConsolidateCnt+1)                ConsolidateCnt = ConsolidateCnt + 1;                BytesCnt = BytesCnt + TIF.StripByteCounts(ConsolidateCnt);                if ( BytesCnt >= PlaneBytesCnt )                     break;                 end            end            %Consolidate the Strips            if ( BytesCnt <= PlaneBytesCnt(1) ) && ( ConsolidateCnt > 1 )                %fprintf(1,'Consolidating %i stripes out of %i',                %ConsolidateCnt, TIF.StripNumber);                TIF.StripByteCounts = [BytesCnt; TIF.StripByteCounts(ConsolidateCnt+1:TIF.StripNumber ) ];                TIF.StripOffsets = TIF.StripOffsets( [1 , ConsolidateCnt+1:TIF.StripNumber] );                TIF.StripNumber  = 1 + TIF.StripNumber - ConsolidateCnt;            end        end    end    %read the next IFD address:    ifd_pos = fread(TIF.file, 1, 'uint32', TIF.BOS);    %if (ifd_pos) disp(['next ifd at', num2str(ifd_pos)]); end    if isfield( TIF, 'MM_stack' )        img_last = TIF.MM_stackCnt;        frames = img_last - img_first + 1;        imgdata = zeros(frames, width, height, 'uint16');        intensity = zeros(frames, 1);        %this loop is to read metamorph stacks:        % this part will need more testing        for ii = img_first:img_last            TIF.StripCnt = 1;            %read the image            fileOffset = PlaneBytesCnt * ( ii - 1 );            %fileOffset = 0;            %fileOffset = ftell(TIF.file) - TIF.StripOffsets(1);            if ( TIF.SamplesPerPixel == 1 )                imgdata(ii, :, :)  = read_plane(fileOffset, IMG.width, IMG.height, 1);            else                % IMG.red   = read_plane(fileOffset, IMG.width, IMG.height, 1);                % IMG.green = read_plane(fileOffset, IMG.width, IMG.height, 2);                % IMG.blue  = read_plane(fileOffset, IMG.width, IMG.height, 3);                showmsg('WFI Reader does not handle true color TIF images.');                data = 0;                return;            end            % print a text timer on the main window, or update the waitbar            % fprintf(1,'img_read %i img_skip %i\n', img_read, img_skip);            %[ IMG.info, IMG.MM_stack, IMG.MM_wavelength, IMG.MM_private2 ]            %= extractMetamorphData(ii);            img_read = img_read + 1;            pause(0.001);            %stack( img_read ) = IMG;        end        break;    else        %this part to read a normal TIFF stack:        if ( img_skip + 1 >= img_first )            TIF.StripCnt = 1;            %read the image            if ( TIF.SamplesPerPixel == 1 )                %fileOffset = PlaneBytesCnt * img_read;                plane  = read_plane(0, IMG.width, IMG.height, 1);                if isempty(plane)       % end of file reached.                    mesg = sprintf('WFI Reader: loading frame %4.0d', img_read);                    showmsg(h_mainfig, 'message', mesg);                    break;                end                img_read = img_read + 1;                tempdata(img_read, 1:data.width, 1:data.height) = plane;                                if mod(img_read, 10) == 0                    mesg = sprintf('WFI Reader: loading frame %4.0d', img_read);                    showmsg(h_mainfig, 'message', mesg);                end                %intensity(img_read) = mean(mean(tempdata(img_read, 1:data.width, 1:data.height)));                pause(0.001);            else                %IMG.red   = read_plane(0, IMG.width, IMG.height, 1);                %IMG.green = read_plane(0, IMG.width, IMG.height, 2);                %IMG.blue  = read_plane(0, IMG.width, IMG.height, 3);                showmsg('WFI Reader does not handle true color TIF images.');                data = 0;                return;            end        else            img_skip = img_skip + 1;        end    endend% clean-up and returnimgdata = tempdata(1:img_read, 1:data.width, 1:data.height);clear tempdata;clear TIF;data.frames = img_read;% compatability assignmentsdata.badframes = 0;data.rbad = 0;if ~ exist( 'data', 'var')    data = [];endreturn;%==========================================================================%==========================================================================function plane = read_plane(offset, width, height, planeCnt )global TIF;%return an empty array if the sample format has zero bitsif ( TIF.BitsPerSample(planeCnt) == 0 )    plane=[];    return;end%fprintf(1,'reading plane %i size %i %i\n', planeCnt, width, height);%string description of the type of integer needed: int8 or int16...typecode = sprintf('int%i', TIF.BitsPerSample(planeCnt) );%unsigned int if SampleFormat == 1if ( TIF.SampleFormat == 1 )    typecode = [ 'u', typecode ];end% Preallocate a matrix to hold the sample data:plane = eval( [ typecode, '(zeros(width, height));'] );line = 1;while ( TIF.StripCnt <= TIF.StripNumber )    strip = read_strip(offset, width, planeCnt, TIF.StripCnt, typecode );    if isempty(strip)       plane = [];       return;    end    TIF.StripCnt = TIF.StripCnt + 1;    % copy the strip onto the data    plane(:, line:(line+size(strip,2)-1)) = strip;    line = line + size(strip,2);    if ( line > height )        break;    endend% Extract valid part of data if neededif ~all(size(plane) == [width height]),    plane = plane(1:width, 1:height);    error('Cropping data: more bytes read than needed...');end% convert the image into 'uint16'%plane = uint16(plane);return;%=================== sub-functions to read a strip ===================function strip = read_strip(offset, width, planeCnt, stripCnt, typecode)global TIF;%fprintf(1,'reading strip at position %i\n',TIF.StripOffsets(stripCnt) +%offset);StripLength = TIF.StripByteCounts(stripCnt) ./ TIF.BytesPerSample(planeCnt);%fprintf(1, 'reading strip %i\n', stripCnt);fseek(TIF.file, TIF.StripOffsets(stripCnt) + offset, 'bof');bytes = fread( TIF.file, StripLength, typecode, TIF.BOS );if ( length(bytes) ~= StripLength )    strip = [];    return;    %error('End of file reached unexpectedly.');endbytes = uint16(bytes);strip = reshape(bytes, width, StripLength / width);return;%===================sub-functions that reads an IFD entry:===================function [nbbytes, typechar] = matlab_type(tiff_typecode)switch (tiff_typecode)    case 1        nbbytes=1;        typechar='uint8';    case 2        nbbytes=1;        typechar='uchar';    case 3        nbbytes=2;        typechar='uint16';    case 4        nbbytes=4;        typechar='uint32';    case 5        nbbytes=8;        typechar='uint32';    otherwise        error('tiff type not supported')endreturn;%===================sub-functions that reads an IFD entry:===================function  entry = readIFDentry()global TIF;entry.typecode = fread(TIF.file, 1, 'uint16', TIF.BOS);entry.cnt      = fread(TIF.file, 1, 'uint32', TIF.BOS);%disp(['typecode =', num2str(entry.typecode),', cnt = ',num2str(entry.cnt)]);[ entry.nbbytes, entry.typechar ] = matlab_type(entry.typecode);if entry.nbbytes * entry.cnt > 4    %next field contains an offset:    offset = fread(TIF.file, 1, 'uint32', TIF.BOS);    %disp(strcat('offset = ', num2str(offset)));    fseek(TIF.file, offset, -1);endif TIF.entry_tag == 33629   %special metamorph 'rationals'    entry.val = fread(TIF.file, 6*entry.cnt, entry.typechar, TIF.BOS);else    if entry.typecode == 5        entry.val = fread(TIF.file, 2*entry.cnt, entry.typechar, TIF.BOS);    else        entry.val = fread(TIF.file, entry.cnt, entry.typechar, TIF.BOS);    endendif ( entry.typecode == 2 )    entry.val = char(entry.val');endreturn;
+function [imginfo, imgdata] = loadtiff( fullname, sample_gap, load_assoc_files )
+% ====
+% function to load data from bio-format (bf) supported file types
+% refer to loci.wisc.edu for more information on bio-formats
+% 
+% usage: data = loadbf(fullname)
+% fullname is full file name including path
+% data contains accessory information about the image/movie file
+% 
+% Xiaolin Nan, OHSU, 09/01/2012
+% version 0: only takes series 1
+% in the next version, will modify the img_data global array into
+% a structure array to contain meta data for each frame
+% to prepare for multicolor imaging data
+%
+% Xiaolin Nan, OHSU, 09/03/2012
+% combined the original bfopen.m with loadbf.m; only retrieving image data
+% in series 1 and no meta data nor colormap information
+%
+% Major revision 02/17/2020, Xiaolin Nan (OHSU)
+% 1. Ditched the bioformats plugin for reading TIFFs as a whole (which is
+%    too slow that it takes 15-30 minutes to just load a file). 
+%    Now the function utilizes libtiff for accessing TIFF info and image
+%    data.
+% 2. Added support for a 'sampler' mode which returns a small subset of the
+%    images when the raw video is too big and takes up too much memory.
+% 3. Aside from returning imginfo (data), the function also stores some key
+%    info of the file in params:
+%    .fileinfo structure with the following fields
+%       .numfiles - the number of files associated with the RAW tiff stack
+%       .filenames - names of the files in correct order
+%       .frames - number of IFDs in each file
+%    This information can be accessed in other functions.
+% 
+% Revision 03/04/2020, Xiaolin Nan
+% 1. Added an output imgdata (in addition to imginfo) so this can be called
+%	 by other functions without affecting the global imgdata;
+
+
+	global h_mainfig params;
+	
+	% calling with only one argument is normal mode
+	if nargin == 1
+		sample_gap = 1;
+	else
+		if sample_gap < 1
+			sample_gap = 1;
+		end	
+	end
+	
+	[pathname,filename,ext] = fileparts(fullname);
+	msg = sprintf('Analzying file %s. Please wait ...', [filename,ext]);
+	showmsg(h_mainfig, 'message', msg);	pause(0.05);
+	%disp(msg);
+	
+	tif_info = analyze_tifs(fullname, load_assoc_files);
+	
+	% in case something went wrong
+	if isempty(tif_info)
+		imginfo = [];
+		imgdata = [];
+		return;
+	end
+	
+	counted_frames = 0;
+	sampled_frames = 0;
+	actual_frames = {[]};
+	params.fileinfo.numfiles = tif_info.totalfiles;
+	params.fileinfo.frames = zeros(1, params.fileinfo.numfiles);
+	
+	est_frames = ceil(1.2*tif_info.totalframes / sample_gap);
+	imgdata = zeros(tif_info.height, tif_info.width, est_frames, 'uint16');
+	
+	for i = 1 : tif_info.totalfiles
+		fullname = cell2mat(tif_info.files(i));
+		[~,filename] = fileparts(fullname);
+		
+		tf = Tiff(fullname);
+		tf.setDirectory(1);
+		
+		more_frames = true;
+		read_last_frame = false;
+		cur_frames = 0;				% frame counter for the current file
+		
+		while more_frames
+			counted_frames = counted_frames + 1;
+			cur_frames = cur_frames + 1;
+			
+			% sample the first frame and every sample_gap frames 
+			if counted_frames == 1 || mod(counted_frames, sample_gap) == 0
+				sampled_frames = sampled_frames + 1;
+				actual_frames(sampled_frames) = {counted_frames};
+				imgdata(:, :, sampled_frames) = tf.read;
+				
+				if tf.lastDirectory
+					read_last_frame = true;
+				end
+			end
+			
+			if counted_frames == 1 || mod(counted_frames, 100) == 0
+				msg = sprintf('Reading data from file %s (file %d of %d): frame #%d', filename, i, tif_info.totalfiles, counted_frames);
+				showmsg(h_mainfig, 'message', msg);	pause(0.05);
+				%disp(msg);
+			end
+			
+			if tf.lastDirectory
+				more_frames = false;
+			else	
+				try
+					tf.nextDirectory;
+				catch ME
+					% if for some reason, cannot read the next frame (although not reaching the end of the file yet)
+					% treat it as if it is the end
+					more_frames = false;
+					
+					% if the current frame has been sampled, marked it as sampled
+					if counted_frames == 1 || mod(counted_frames, sample_gap) == 0
+						read_last_frame = true;
+					end	
+				end
+			end
+		end
+		
+		if i == tif_info.totalfiles && read_last_frame == false
+			% read in the last frame of the last file if it has not been read
+			% note: every frame has already been counted for
+			sampled_frames = sampled_frames + 1;
+			actual_frames(sampled_frames) = {counted_frames};
+			imgdata(:, :, sampled_frames) = tf.read;
+		end
+	
+		tf.close;
+		% add file to params
+		params.fileinfo.filenames(i) = {fullname};
+		params.fileinfo.frames(i) = cur_frames;
+	end
+
+	msg = sprintf('Finishing up. Please wait ...');
+	showmsg(h_mainfig, 'message', msg);	pause(0.05);
+
+	% populate the imginfo 
+	imginfo.badframes = 0;
+	imginfo.width = tif_info.width;
+	imginfo.height = tif_info.height;
+	imginfo.actualframes = cell2mat(actual_frames);
+	imginfo.frames = sampled_frames;
+	imginfo.rbad = 0;		   
+	
+	% clean up imgdata
+	imgdata(:, :, sampled_frames + 1:est_frames) = [];
+	msg = sprintf('Reading data from file %s: frame #%d (of total %.0f) completed.', filename, counted_frames, counted_frames);
+	showmsg(h_mainfig, 'message', msg);	pause(0.05);
+	
+	return
+	
+	
+	function tif_list = analyze_tifs( fullname, load_assoc_files )
+	% this function analyzes the tif header or filenames in the folder to construct a tif_list
+	% which is a cell array with all the related TIF fullnames
+	
+	% process the input file first
+		tif_list.totalfiles = 0;
+		
+		if load_assoc_files	% when loading associated files
+			% first analyze the full filename
+			[file_common, cid] = regexp(fullname, '(.ome)?(.tif|.tiff|.TIF|.TIFF)', 'match');
+			if isempty(file_common)
+				tif_list = [];
+				return
+			end
+			
+			% now file_common should contain the '.ome.tif' or '.tif' parts of the file and
+			% the cid is the index at which numbering should have been added.
+			dir_common = [fullname(1:cid-1), '*', fullname(cid:length(fullname))];
+			files_unsorted = dir(dir_common);
+			% note that pathname is absent from the files_unsorted and files_sorted arrays
+			files_sorted = natsortfiles( {files_unsorted.name} );
+			
+			% go through each file in the list and make sure it opens and has the same width
+			% and height as the first one
+			
+			counted_files = 0;
+			
+			% there is much more information that can be extracted from iminfo
+			for i = 1 : numel(files_sorted)
+				filename = cell2mat(files_sorted(i));
+				fullname = fullfile(pathname, filename);
+				
+				%msg = sprintf('Opening file #%d: %s ...\n', i, filename);
+				%disp(msg);
+				
+				try
+					tf = Tiff(fullname);
+				catch ME
+					%if i < numel(files_sorted)
+					%	err_msg = sprintf('File %s cannot be opened. Proceeding to the next one.', filename);
+					%else
+					%	err_msg = sprintf('File %s cannot be opened. Skipping the file.', filename);
+					%end
+				
+					%disp(err_msg);
+					continue;
+				end
+				
+				tf.setDirectory(1);			
+				% check image width and height
+				if counted_files == 0
+					[tif_list.height, tif_list.width] = size(tf.read); 
+				end
+				
+				[height, width] = size(tf.read);
+				
+				if height ~= tif_list.height || width ~= tif_list.width
+					%if i < numel(files_sorted)
+					%	err_msg = sprintf('File %s has a non-matching image dimension. Proceeding to the next one.', filename);
+					%else
+					%	err_msg = sprintf('File %s has a non-matching image dimension. Skipping the file.', filename);
+					%end
+				
+					%disp(err_msg);
+					continue;
+				else
+					counted_files = counted_files + 1;
+					tif_list.totalfiles = tif_list.totalfiles + 1;
+					tif_list.files(counted_files) = {fullname};
+				end
+				
+				% estimate the total number of frames based on the 1st TIF file
+				if counted_files == 1				
+					total_frames = 1;
+					
+					while ~tf.lastDirectory
+						tf.nextDirectory;
+						total_frames = total_frames + 1;
+					end
+				end
+				
+				tf.close; pause(0.05);
+			end
+			
+			% note that here the total frames is an estimate.
+			tif_list.totalframes = total_frames * counted_files;
+			tif_list.totalfiles = counted_files;
+		else	% when not loading associated files
+			try
+				tf = Tiff(fullname);
+			catch ME
+				%err_msg = sprintf('File %s cannot be opened. ', filename);
+				
+				%disp(err_msg);
+				tif_list = [];
+				return;
+			end
+			
+			[tif_list.height, tif_list.width] = size(tf.read); 
+			total_frames = 1;
+					
+			while ~tf.lastDirectory
+				tf.nextDirectory;
+				total_frames = total_frames + 1;
+			end
+			
+			tif_list.totalfiles = 1;
+			tif_list.totalframes = total_frames;
+			tif_list.files = {fullname};
+			tf.close; pause(0.05);
+		end
+		
+	end
+	
+end

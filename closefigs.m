@@ -16,13 +16,13 @@ function closefigs(object, event)
         close(userdata.fig3d);
     end
     
-    if find(opened == userdata.figpalm)
-        close(userdata.figpalm);
-    end
+    %if find(opened == userdata.figpalm)
+    %    close(userdata.figpalm);
+    %end
     
-    if find(opened == userdata.figlowres)
-        close(userdata.figlowres);
-    end
+    %if find(opened == userdata.figlowres)
+    %    close(userdata.figlowres);
+    %end
     
     if find(opened == userdata.figintensity)
         close(userdata.figintensity);

@@ -5,23 +5,18 @@ function [pos ints sigx sigy] = ontrack(object, event)
 %  now uses the maximum pixel as the initial (x, y)
 %  and adjusts the selection area according to x and y displacements
 
-    global h_mainfig;
+    global h_mainfig params;
     userdata = get(h_mainfig, 'userdata');
 	
-    %if object ~= 0
-    pstart = str2num(get(userdata.h_palmstart, 'String'));
-    pend   = str2num(get(userdata.h_palmend, 'String'));
-        
-    frameskip = str2num(get(userdata.h_frameskip, 'String')) + 1;
-    fit_frames = pstart : frameskip : pend;
-    frames = numel(fit_frames);
-    pend = fit_frames(frames); 
-    %else
-    %   pstart = 1;
-    %    pend = userdata.frames;
-    %end
+    if params.largevmode == 0
+        pstart = str2double(get(userdata.h_palmstart, 'String'));
+        pend   = str2double(get(userdata.h_palmend, 'String'));
+    else
+        pstart = 1;
+        pend = userdata.frames;
+    end
     
-    %frames = pend - pstart + 1;
+    frames = pend - pstart + 1;
 
 	% prepare returning parameters
     pos = zeros(frames, 2);
@@ -51,9 +46,6 @@ function [pos ints sigx sigy] = ontrack(object, event)
 	%[width height] = size(img);
 
     for i = 2 : frames
-        
-        j = fit_frames(i);
-        
 		% determine the tracking region
 		startx = floor(pos(i-1, 1) - 5);
 		starty = floor(pos(i-1, 2) - 5);
@@ -78,12 +70,12 @@ function [pos ints sigx sigy] = ontrack(object, event)
 		end
 		
 		% retrieve a fitting area surrounding the previous centriod
-		[img, xoff, yoff] = ongetframe(j, [startx starty endx endy]);
+		[img, xoff, yoff] = ongetframe(i + pstart - 1, [startx starty endx endy]);
 
 		% perform gaussian fitting
         [x, y, sx, sy, a] = fitgauss(img, 1e-4);
         
-        %output = fitgaussc(img, 1, 1e-3, 20)
+        %output = fitgaussc(img, 1, 1e-3, 20);
         %x = output(4);
         %y = output(3);
         %sx = output(6);
@@ -91,21 +83,23 @@ function [pos ints sigx sigy] = ontrack(object, event)
         %a = output(2);
         
       
-		% adjust coordinates to whole image
+		% adjust coordinates to whole image every 100 frames
 		pos(i, 1) = x + xoff - 1;
 		pos(i, 2) = y + yoff - 1;
 		sigx(i) = sx;		sigy(i) = sy;		ints(i) = a;
 		
 		% make sure that the tracking does not go wrong dramatically
-		distance = sqrt((pos(i, 1) - pos(i-1, 1))^2 + (pos(i, 2) - pos(i-1, 2))^2);
-        
-		if distance > 1
-			pos(i, 1) = pos(i-1, 1);
-			pos(i, 2) = pos(i-1, 2);
-			sigx(i) = sigx(i-1);
-			sigy(i) = sigy(i-1);
-			ints(i) = ints(i-1);
-		end
+		%if mod(i,20) == 0 
+			distance = sqrt((pos(i, 1) - pos(i-1, 1))^2 + (pos(i, 2) - pos(i-1, 2))^2);
+			
+			if distance > 1
+				pos(i, 1) = pos(i-1, 1);
+				pos(i, 2) = pos(i-1, 2);
+				sigx(i) = sigx(i-1);
+				sigy(i) = sigy(i-1);
+				ints(i) = ints(i-1);
+			end
+		%end
     end
 
 	% adjust the coordinates relative to fiducial markers if the latter is defined
@@ -115,19 +109,30 @@ function [pos ints sigx sigy] = ontrack(object, event)
             pos(:, 2) = pos(:, 2) - userdata.markerpos(1 : frames, 2);
     end
 
-    % enable 'marker def'
-    set(userdata.h_marker, 'enable', 'on');
+    % enable 'marker def' if not in the large video mode
+    if params.largevmode == 0
+		set(userdata.h_marker, 'enable', 'on');
+	end
 
-    % draw the particle
+    % draw the particle (draw only if the current frame is within the range)
     k = userdata.currentframe; % - pstart + 1;
     if object ~= 0  % not from external call
-        figure(h_mainfig); hold on; plot(pos(k - pstart + 1, 1), pos(k - pstart + 1, 2), 's', 'LineWidth', 2, 'MarkerSize', 18, 'MarkerEdgeColor', color);
+        figure(h_mainfig); 
+		
+		draw_frame = k - pstart + 1;
+		if draw_frame < 1
+			draw_frame = 1;
+		end
+		
+		
+        hold on; plot(pos(draw_frame, 1), pos(draw_frame, 2), 's', 'LineWidth', 2, 'MarkerSize', 18, 'MarkerEdgeColor', color);
     
         % draw the displacement trajecotry
         displ = displace(pos);
-        %f = fit_frames;;
-        figure(userdata.figdisplace); set(gcf, 'numbertitle', 'off', 'name', 'Displacement Trajectory');
-        hold on; plot(fit_frames, displ, 'Color', color);
+        f = pstart: pend;
+        figure(userdata.figdisplace); 
+        set(gcf, 'numbertitle', 'off', 'name', 'Displacement Trajectory');
+        hold on; plot(f, displ, 'Color', color);
         xlabel('Frame No.');    ylabel('Displacement (pixel)');
         xlim([pstart max(pend, pstart + 1)]);       ylim([0 max(1, max(max(ylim), max(displ)))]);
         grid on; box on;

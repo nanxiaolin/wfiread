@@ -14,9 +14,9 @@ function startselection(object, event)
     end
     
     % if previous selection is in place, remove it
-	if userdata.h_selrect > 0
+	if ishandle(userdata.h_selrect)
 		delete(userdata.h_selrect);
-        userdata.h_selrect = -1;
+        %userdata.h_selrect = -1;
         
         showmsg(h_mainfig, 'selstart', sprintf('(%d, %d)', xinit, yinit));
         mesg = sprintf('(%d, %d)', userdata.width, userdata.height);
@@ -30,7 +30,7 @@ function startselection(object, event)
 	startx = xinit;   starty = yinit;
 	rw = 1; rh = 1;
 
-    userdata.h_selrect = rectangle('Position', [xinit yinit 1 1], 'LineStyle', '-', 'EdgeColor', [0.6,0.6,0.6]);
+    userdata.h_selrect = rectangle('Position', [xinit yinit 1 1], 'LineStyle', '-', 'EdgeColor', [0.6, 0.1, 1]);
 	set(h_mainfig, 'WindowButtonMotionFcn', @drawselection);
 	set(h_mainfig, 'WindowButtonUpFcn', @endselection);
 
@@ -111,7 +111,7 @@ function startselection(object, event)
 		set(userdata.h_plot, 'enable', 'on');
 		set(userdata.h_fit, 'enable', 'on');
         set(userdata.h_track, 'enable', 'on');
-        set(userdata.h_marker, 'enable', 'on');
+        %set(userdata.h_marker, 'enable', 'on');
         %set(userdata.h_stats, 'enable', 'on');
         %set(userdata.h_zoomin, 'enable', 'on', 'String', '+', 'callback', @onzoomin);
         

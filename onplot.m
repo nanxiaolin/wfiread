@@ -1,4 +1,4 @@
-function intensity = onplot(object, event)
+function onplot(object, event)
 %
     global h_mainfig;
     
@@ -13,14 +13,18 @@ function intensity = onplot(object, event)
         end
         
 		img = getselection(i);
-		intensity(i) = sum(sum(img));
+		intensity(i) = mean(mean(img));
     end
 	
     color = rand(1, 3);
     
-    n = userdata.figintensity;
-	figure(n); plot([1:i], intensity, 'Color', color); axis on; hold on;
-    set(n, 'NumberTitle', 'off', 'Name', 'Intensity Trajectory');
+    %if (find(opened == userdata.figintensity))
+    %    n = userdata.figintensity;
+    %    figure(n); 
+    %else
+    n = figure(userdata.figintensity);
+    plot([1:i], intensity, 'Color', color); axis on; hold on;
+    set(n, 'NumberTitle', 'off', 'Name', 'Intensity Trajectory', 'visible', 'on');
 	xlabel('Frame Number'); ylabel('Intensity (a.u.)');
 	xlim([0 userdata.frames]);
 	%ylim([0 65535]);

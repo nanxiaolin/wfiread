@@ -1,4 +1,4 @@
-function [numObj centers xs ys fit_boxes] = findparticles(obj, event)
+function [numobj, centers] = findparticles(obj, event)
 % function to find particles
 % suited for sparsely distributed particles
 % faster than findparticles algorithms using watershed
@@ -38,6 +38,11 @@ function [numObj centers xs ys fit_boxes] = findparticles(obj, event)
 %  this allows us to pool the data and send everything to the GPU at once for faster processing
 %  timing measurement shows that Gaussian fitting takes up 99% of the time, and can be
 %  significantly sped up by sending the data to GPUs or at least using multiple threads on a CPU.
+% 
+% revision on 02/22/2020
+%  Major revision to make use of the new smlocalize function (CPU based) which returns the numobjects and coords
+%  Refer to the smlocalize source code or annotations below for the format of the output
+%  This function performs a quick fitting to identify the particles. For precise localizations please call smlocalize directly.
 %
 % Please feel free to distribute this script as long as you cite our original work (Nan et al PNAS, 2013)
 % Xiaolin Nan, Oregon Health and Science University, Portland
@@ -45,21 +50,21 @@ function [numObj centers xs ys fit_boxes] = findparticles(obj, event)
 
 global h_mainfig params;
 
-
+tic;
 % obj signals the purpose of calling this function
-%   obj = 0 means called by other programs such as onmakecoord, use existing parameters
+%   obj = 0 means called by other programs such as onmakecoord, in which case the event is the mcpars structure; or event can be the frame
+%			number, in which case the parameters use existing parameters
 %   obj = 1 means called by the GUI, use the current frame number and selection
 
-
 if obj == 0
-    	frame = event;
-    	factor = params.factor;
-    	sig_min = params.sig_min;
-    	sig_max = params.sig_max;
-   	meth = params.meth;
-    	sm_area = params.sm_area;
+    frame = event;
+    thresh = params.factor;
+    sig_min = params.sig_min;
+    sig_max = params.sig_max;
+    meth = params.meth;
+    contrast_factor = params.contrast_factor;
+	psf_size = params.psf_size;
 else
-    tic
 	userdata = get(h_mainfig, 'userdata');
    	frame = userdata.currentframe;
    	%startx = userdata.selection(1);
@@ -67,92 +72,91 @@ else
 	%endx   = userdata.selection(3);
 	%endy   = userdata.selection(4);
 
-	factor = str2num(get(userdata.h_threshold, 'String'));
-	sig_min = str2num(get(userdata.h_sigmamin, 'String'));
-	sig_max = str2num(get(userdata.h_sigmamax, 'String'));
-   	sm_area = str2num(get(userdata.h_smootharea, 'String'));
+	thresh = str2double(get(userdata.h_threshold, 'String'));
+	sig_min = str2double(get(userdata.h_sigmamin, 'String'));
+	sig_max = str2double(get(userdata.h_sigmamax, 'String'));
+   	contrast_factor = str2double(get(userdata.h_contrastfactor, 'String'));
+	psf_size = str2double(get(userdata.h_psfsize, 'String'));	
 	% see which method is chosen to identify the particles
 	meth = get(userdata.h_mnuPF, 'value');
 end
 
-fullimg = ongetframe(frame);
 startx = params.startx;
 starty = params.starty;
 endx = params.endx;
 endy = params.endy;
 
-% all the different particle finding algorithms will define a list of fit
-% boxes surrounding each particle. returned information include:
-% 1. numObj = total number of particles meeting certain criteria
-% 2. centers = center pixel as found corasely by the algorithm
-% 3. xs = start x pixel of the fitting box
-% 4. ys = start y pixel of the fitting box
-% 5. fit_boxes = the fitting boxes that surround each particle.
+% set some fitting parameters
+nms_region = 2; 	% search region is 1+2*nms_region
+%min_pixel = 4;
+mask_rgn = psf_size;
+err = 1e-2;
+max_iter = 10;
 
-if meth == 1 % NMS method
-   img = fullimg(starty : endy, startx : endx);
-   [numObj centers xs ys fit_boxes] = fp_nms(img, factor, sig_min, sig_max, startx, starty);
-elseif meth == 2 % SIT (Simple Intensity Threshold) method
-   [numObj centers xs ys fit_boxes] = fp_thresh(fullimg, sm_area, factor, sig_min, sig_max, startx, starty, endx, endy);
+fullimg = ongetframe(frame);
+img = fullimg(starty : endy, startx : endx);
+% smlocalize format: smlocalize( img, nms_region, mask_region, thresh_factor, min_pixel, sig_min, sig_max, err, max_iter )
+[numobj, coords] = smlocalize(img, nms_region, mask_rgn, thresh, contrast_factor, sig_min, sig_max, err, max_iter);
+
+% output of smlocalize: 
+% numobj = number of actual objects identified as local max and passed fitting quality check
+% coords = 10 x N matrix (N usually > numobj) container matrix with the following format
+%	coords(1, :) = b;			background
+%	coords(2, :) = a;			fitting amplitude
+%	coords(3, :) = x0;			x position == note: x and y swapped before smlocalize returns to be compatible with
+%	coords(4, :) = y0;			y position == conventional notations where x (cols, slow) goes before y (rows, fast)
+%	coords(5, :) = sigx;		sigma in x == note: the same as above, with (sigx, sigy) swapped 
+%	coords(6, :) = sigy;		sigma in y == note above
+%	coords(7, :) = goodness;	goodness of fitting (the smaller the better)
+%	coords(8, :) = bk_rms;   	backgroun residual noise after fitting
+%	coords(9, :) = iter;		number of iterations before reaching the desired error
+%	coords(10, :)= local_rms;	local RMS computed using an area larger (currently 3x) than the mask_region in order to
+%								definitively call a particle out.
+
+
+% clean up the results according to sigma range settings
+if numobj > 0 
+	coords = coords(:, 1:numobj);
+	centers = [coords(3, :);coords(4, :)];
+	centers(1, :) = centers(1, :) + startx - 1;
+	centers(2, :) = centers(2, :) + starty - 1;
+else
+	centers = [];
 end
 
 %save('fitboxes.mat', 'fit_boxes', '-MAT');
 
-
+%% for calls from the GUI, display the output; otherwise, return
 if obj~=0
-    if numObj > 0
-       
-        %show_binary = get(findobj(h_mainfig, 'tag', 'chkshowbinary'), 'Value');
-        
-        %if show_binary
-        %    fullimg(:, :) = 0;
-        %    fullimg(starty:endy, startx:endx) = img;
-        %    imshow(fullimg, [0 1]);  
-        %else
-        showframe(frame);
-        %end
-
-        sigx = zeros(numObj, 1);
-        sigy = zeros(numObj, 2);
-        
-        % fit all the centers
-        [fit_height fit_width ~] = size(fit_boxes);
-        %img = zeros(fit_height, fit_width);
-        for i = 1: numObj
-            img = fit_boxes(:, :, i);
-            [centers(1, i), centers(2, i), sigx(i), sigy(i)] = fitgauss(img, 1e-4);
-            centers(1, i) = centers(1, i) + xs(i) - 1;
-            centers(2, i) = centers(2, i) + ys(i) - 1;
-        end
-        
-        % filter the data according to the filter settings
-        r = find(sigx >= sig_min);
-        centers = centers(:, r); sigx = sigx(r); sigy = sigy(r);
-        r = find(sigy >= sig_min);
-        centers = centers(:, r); sigx = sigx(r); sigy = sigy(r);
-        r = find(sigx <= sig_max);
-        centers = centers(:, r); sigx = sigx(r); sigy = sigy(r);
-        r = find(sigy <= sig_max);
-        centers = centers(:, r); sigx = sigx(r); sigy = sigy(r);
-        numparticles = length(centers);
-        
-        % show the number of particles found
-        mesg = sprintf('Found %d particle(s) in selected area in %.4f seconds. ', numparticles, toc);
+    if numobj > 0
         figure(h_mainfig); 
-               
-        if meth == 2
-        	color = [0 0.7 0];
-        else
-        	color = [0.7 0.7 0];
-        end
         
-        hold on; plot(centers(1, :), centers(2, :), 's', 'LineWidth', 1, 'MarkerSize', 14, 'MarkerEdgeColor', color);  
+		% estimate the marker size
+		sig_mean = mean(coords(5, :)+coords(6, :));
+		[height,width]=size(fullimg);
+		axis_size = get(gca, 'Position'); axis_ampl = ((axis_size(3)/height)+(axis_size(4)/width))/2;
+		ax = xlim; axis_zoom = width / (ax(2) - ax(1) + 1);
+		markersize = round(sig_mean * axis_ampl * 1.6 * axis_zoom);
+		linewidth = 0.8 + markersize / 20;
+		
+		hold on; 
+        if userdata.h_particlecenters ~= -1
+            delete(userdata.h_particlecenters);
+            userdata.h_particlecenters = -1;
+        end
+		
+        userdata.h_particlecenters = plot(centers(1, :), centers(2, :), 's', 'LineWidth', linewidth, 'MarkerSize', markersize, 'MarkerEdgeColor', [0.0 0.9 0]);  
         %hold on; plot(xs(:), ys(:), 'g+');
+        set(h_mainfig, 'userdata', userdata);
+        
+		mesg = sprintf('Found %d particle(s) in selected area in %.4f seconds. ', numobj, toc);		
     else
-        mesg = sprintf('No particle found in selected area. ');
+			mesg = sprintf('No particle found in selected area. ');
     end
 
-    showmsg(h_mainfig, 'message', mesg);
+    if nargin == 2	% only shows a message if two inputs (to trigger a message line output)
+		showmsg(h_mainfig, 'message', mesg);
+	end
 end
 
 %clear fullimg img;

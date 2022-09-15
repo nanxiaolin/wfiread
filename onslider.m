@@ -3,13 +3,13 @@ function onslider(object, event)
     global h_mainfig;
     
     warning off;
-	userdata = get(gcf, 'userdata');
+	userdata = get(h_mainfig, 'userdata');
     
     value = get(object, 'Value');
-	frame = uint32(value) + 1;
+	frame = value + 1;
 
 	if frame == 0
-		frame = 1;
+		frame = 1.0;
 	elseif frame > userdata.frames
 		frame = userdata.frames;
 	end
